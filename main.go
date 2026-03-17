@@ -6,13 +6,12 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"runtime/debug"
 
 	"database/sql"
 
 	_ "github.com/mattn/go-sqlite3"
 )
-
-var databasePath = "$HOME/.local/gotasks"
 
 type Task struct {
 	Id          string
@@ -37,11 +36,17 @@ func main() {
 	name := flag.String("name", "", "a name to a task")
 	description := flag.String("description", "", "a description of a task")
 	action := flag.String("action", "list", "a action to run a cli")
+	version := flag.Bool("version", false, "the version of cli")
 	all := flag.Bool("all", false, "a flag to list all enabled")
 
 	flag.Parse()
 
 	vvlogf("action=%s,id=%s,name=%s,description=%s,verbose=%t,vverbose=%t\n", *action, *id, *name, *description, *verbose, *vverbose)
+
+	if *version == true {
+		log.Println(getVersion())
+		return
+	}
 
 	db, err := openDatabase()
 	if err != nil {
@@ -102,7 +107,6 @@ func openDatabase() (*sql.DB, error) {
 	}
 
 	databaseUrl := fmt.Sprintf("%s/%s", databasePath, databaseName)
-	fmt.Println(databaseUrl)
 
 	db, err := sql.Open("sqlite3", databaseUrl)
 	if err != nil {
@@ -205,4 +209,14 @@ func vvlogf(format string, v ...any) {
 	if *vverbose {
 		log.Printf(format, v...)
 	}
+}
+
+func getVersion() string {
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return "unknown"
+	}
+
+	version := info.Main.Version
+	return version
 }
