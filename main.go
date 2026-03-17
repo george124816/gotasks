@@ -5,11 +5,14 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"os"
 
 	"database/sql"
 
 	_ "github.com/mattn/go-sqlite3"
 )
+
+var databasePath = "$HOME/.local/gotasks"
 
 type Task struct {
 	Id          string
@@ -85,7 +88,23 @@ func main() {
 }
 
 func openDatabase() (*sql.DB, error) {
-	db, err := sql.Open("sqlite3", "./tasks.db")
+	databaseName := "tasks.db"
+	homePath, err := os.UserHomeDir()
+	if err != nil {
+		return nil, err
+	}
+
+	databasePath := fmt.Sprintf("%s/.local/gotasks", homePath)
+
+	err = os.MkdirAll(databasePath, os.ModePerm)
+	if err != nil {
+		return nil, err
+	}
+
+	databaseUrl := fmt.Sprintf("%s/%s", databasePath, databaseName)
+	fmt.Println(databaseUrl)
+
+	db, err := sql.Open("sqlite3", databaseUrl)
 	if err != nil {
 		return nil, err
 	}
