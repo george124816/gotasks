@@ -2,6 +2,10 @@
 ## Instalation
 
 ```sh
+# specific version
+go install github.com/george124816/gotasks@v0.2.0
+
+# latest version
 go install github.com/george124816/gotasks@latest
 ```
 
