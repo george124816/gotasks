@@ -1,6 +1,7 @@
 package main
 
 import (
+	encodingJson "encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -14,22 +15,31 @@ import (
 )
 
 type Task struct {
-	Id          string
+	Id          int64
 	Name        string
 	Description string
-	Enabled     string
+	Enabled     bool
 }
 
 func (task Task) String() string {
-	return fmt.Sprintf("enabled:%s\nid: %s\nname: %s\ndescription:%s\n", task.Enabled, task.Id, task.Name, task.Description)
+	return fmt.Sprintf("id: %d\nenabled: %t\nname: %s\ndescription: %s\n", task.Id, task.Enabled, task.Name, task.Description)
 }
 
 func (t Task) Print() {
-	fmt.Println(t.String())
+	if *json {
+		result, err := encodingJson.Marshal(t)
+		if err != nil {
+			log.Fatalln(err)
+		}
+		fmt.Println(string(result))
+	} else {
+		fmt.Print(t.String())
+	}
 }
 
 var verbose = flag.Bool("v", false, "enable verbose log")
 var vverbose = flag.Bool("vv", false, "enable super verbose log")
+var json = flag.Bool("json", false, "output json")
 
 func main() {
 	id := flag.String("id", "", "a Id to retrieve some task")
@@ -44,7 +54,7 @@ func main() {
 	vvlogf("action=%s,id=%s,name=%s,description=%s,verbose=%t,vverbose=%t\n", *action, *id, *name, *description, *verbose, *vverbose)
 
 	if *version == true {
-		log.Println(getVersion())
+		fmt.Println(getVersion())
 		return
 	}
 
@@ -61,32 +71,50 @@ func main() {
 
 	switch *action {
 	case "create":
-		vlogf("lets create")
+		vlogf("creating a new item")
 
 		if *name != "" {
-			createTask(db, Task{Name: *name, Description: *description})
+			task, err := createTask(db, Task{Name: *name, Description: *description})
 
+			if err != nil {
+				log.Fatalln(err)
+			}
+
+			task.Print()
 		} else {
 			log.Fatalln("a task needs a name")
 		}
 	case "list":
 		vlogf("listing tasks")
+
 		lists, err := listTasks(db, *all)
+
 		if err != nil {
 			log.Fatalln(err)
 		}
-		fmt.Println(lists)
+
+		for _, task := range lists {
+			task.Print()
+		}
 	case "get":
 		if *id != "" {
-			getTask(db, *id)
+			task, err := getTask(db, *id)
+			if err != nil {
+				log.Fatalln(err)
+			}
+			task.Print()
 		} else {
-			log.Println("a id should be provided")
+			fmt.Println("a id should be provided")
 		}
 	case "complete":
 		if *id != "" {
-			completeTask(db, *id)
+			task, err := completeTask(db, *id)
+			if err != nil {
+				log.Fatalln(err)
+			}
+			task.Print()
 		} else {
-			log.Println("to complete task need a id")
+			fmt.Println("to complete task need a id")
 		}
 	}
 
@@ -101,7 +129,7 @@ func openDatabase() (*sql.DB, error) {
 
 	databasePath := fmt.Sprintf("%s/.local/gotasks", homePath)
 
-	err = os.MkdirAll(databasePath, os.ModePerm)
+	err = os.MkdirAll(databasePath, 0700)
 	if err != nil {
 		return nil, err
 	}
@@ -140,7 +168,14 @@ func listTasks(db *sql.DB, all bool) ([]Task, error) {
 	}
 	rows, err := db.Query(query)
 	if err != nil {
-		return nil, errors.New("failed to query")
+		return nil, err
+	}
+	defer rows.Close()
+
+	err = rows.Err()
+
+	if err != nil {
+		return nil, err
 	}
 
 	var result []Task
@@ -159,19 +194,27 @@ func listTasks(db *sql.DB, all bool) ([]Task, error) {
 }
 
 func createTask(db *sql.DB, inputTask Task) (*Task, error) {
-	var task Task
-	err := db.QueryRow(`INSERT INTO tasks (name, description)
+	result, err := db.Exec(`INSERT INTO tasks (name, description)
 	VALUES (?, ?)
-	RETURNING id, name, description, enabled;`, inputTask.Name, inputTask.Description).Scan(&task.Id, &task.Name, &task.Description, &task.Enabled)
-
+	RETURNING id, name, description, enabled;`, inputTask.Name, inputTask.Description)
 	if err != nil {
-		log.Fatalln(err)
+		return nil, err
 	}
 
-	fmt.Println("task inserted")
-	fmt.Printf("id: %s\nenabled: %s\nname: %s\ndescription:%s\n", task.Id, task.Enabled, task.Name, task.Description)
+	lastInsertId, err := result.LastInsertId()
+	if err != nil {
+		return nil, err
+	}
 
-	return &task, nil
+	task := &Task{
+		Id:          lastInsertId,
+		Name:        inputTask.Name,
+		Description: inputTask.Description,
+		Enabled:     true,
+	}
+
+	vlogf("task inserted")
+	return task, nil
 }
 
 func getTask(db *sql.DB, id string) (*Task, error) {
@@ -183,8 +226,6 @@ func getTask(db *sql.DB, id string) (*Task, error) {
 		return nil, errors.New("failed to scan result")
 	}
 
-	task.Print()
-
 	return &task, nil
 }
 
@@ -194,7 +235,7 @@ func completeTask(db *sql.DB, id string) (*Task, error) {
 	if err != nil {
 		return nil, errors.New("failed to update")
 	}
-	log.Println("task completed", task)
+	vlogf("task completed")
 
 	return &task, nil
 }
