@@ -64,7 +64,7 @@ func main() {
 	}
 	defer db.Close()
 
-	err = runMigration(db)
+	err = RunMigration(db)
 	if err != nil {
 		log.Fatalln(err)
 	}
@@ -144,7 +144,7 @@ func openDatabase() (*sql.DB, error) {
 	return db, nil
 }
 
-func runMigration(db *sql.DB) error {
+func RunMigration(db *sql.DB) error {
 	migration := `CREATE TABLE IF NOT EXISTS tasks 
 	(id INTEGER PRIMARY KEY AUTOINCREMENT,
 	name text,
