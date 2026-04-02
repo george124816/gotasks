@@ -2,6 +2,9 @@ package main
 
 import (
 	"database/sql"
+	"log"
+	"reflect"
+	"strconv"
 	"testing"
 )
 
@@ -96,6 +99,65 @@ func TestRunMigration_AssertSchea(t *testing.T) {
 		if got.typ != want.typ {
 			t.Fatalf("type mismatch: got=%s want=%s", got.typ, want.typ)
 		}
+	}
+}
+
+func TestCreateTask(t *testing.T) {
+	db, err := setupDatabase()
+	if err != nil {
+		t.Error(err)
+	}
+
+	RunMigration(db)
+
+	id := int64(1)
+	name := "sometask"
+	description := "some description"
+	enabled := true
+
+	inputTask := Task{
+		Id:          id,
+		Name:        name,
+		Description: description,
+		Enabled:     enabled,
+	}
+
+	returnedTask, err := createTask(db, inputTask)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if returnedTask.Name != inputTask.Name {
+		log.Fatalf("wanted %s but got %s", inputTask.Name, returnedTask.Name)
+	}
+
+	if returnedTask.Description != inputTask.Description {
+		log.Fatalf("wanted %s but got %s", inputTask.Description, returnedTask.Description)
+	}
+}
+
+func TestGetTask(t *testing.T) {
+	db, _ := setupDatabase()
+	RunMigration(db)
+
+	id := int64(1)
+	name := "sometask"
+	description := "some description"
+	enabled := true
+
+	inputTask := Task{
+		Id:          id,
+		Name:        name,
+		Description: description,
+		Enabled:     enabled,
+	}
+
+	createdTask, _ := createTask(db, inputTask)
+
+	returnedTask, _ := getTask(db, strconv.FormatInt(createdTask.Id, 10))
+
+	if !reflect.DeepEqual(returnedTask, createdTask) {
+		t.Errorf("expected %v returned %v", createdTask, returnedTask)
 	}
 }
 

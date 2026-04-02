@@ -1,8 +1,7 @@
 package main
 
 import (
-	encodingJson "encoding/json"
-	"errors"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
@@ -26,8 +25,8 @@ func (task Task) String() string {
 }
 
 func (t Task) Print() {
-	if *json {
-		result, err := encodingJson.Marshal(t)
+	if *inputJson {
+		result, err := json.Marshal(t)
 		if err != nil {
 			log.Fatalln(err)
 		}
@@ -39,7 +38,7 @@ func (t Task) Print() {
 
 var verbose = flag.Bool("v", false, "enable verbose log")
 var vverbose = flag.Bool("vv", false, "enable super verbose log")
-var json = flag.Bool("json", false, "output json")
+var inputJson = flag.Bool("json", false, "output json")
 
 func main() {
 	id := flag.String("id", "", "a Id to retrieve some task")
@@ -194,27 +193,15 @@ func listTasks(db *sql.DB, all bool) ([]Task, error) {
 }
 
 func createTask(db *sql.DB, inputTask Task) (*Task, error) {
-	result, err := db.Exec(`INSERT INTO tasks (name, description)
-	VALUES (?, ?)
-	RETURNING id, name, description, enabled;`, inputTask.Name, inputTask.Description)
+	var outputTask Task
+	queryStmt := `INSERT INTO tasks (name, description) VALUES (?, ?) RETURNING id, name, description, enabled;`
+	err := db.QueryRow(queryStmt, inputTask.Name, inputTask.Description).Scan(&outputTask.Id, &outputTask.Name, &outputTask.Description, &outputTask.Enabled)
 	if err != nil {
 		return nil, err
-	}
-
-	lastInsertId, err := result.LastInsertId()
-	if err != nil {
-		return nil, err
-	}
-
-	task := &Task{
-		Id:          lastInsertId,
-		Name:        inputTask.Name,
-		Description: inputTask.Description,
-		Enabled:     true,
 	}
 
 	vlogf("task inserted")
-	return task, nil
+	return &outputTask, nil
 }
 
 func getTask(db *sql.DB, id string) (*Task, error) {
@@ -223,7 +210,7 @@ func getTask(db *sql.DB, id string) (*Task, error) {
 	err := db.QueryRow(`SELECT id, enabled, name, description FROM tasks WHERE id = ?`, id).Scan(&task.Id, &task.Enabled, &task.Name, &task.Description)
 
 	if err != nil {
-		return nil, errors.New("failed to scan result")
+		return nil, fmt.Errorf("failed to scan result: %w", err)
 	}
 
 	return &task, nil
@@ -233,7 +220,7 @@ func completeTask(db *sql.DB, id string) (*Task, error) {
 	var task Task
 	err := db.QueryRow(`UPDATE tasks SET enabled = false WHERE id = ? RETURNING id, enabled, name, description`, id).Scan(&task.Id, &task.Enabled, &task.Name, &task.Description)
 	if err != nil {
-		return nil, errors.New("failed to update")
+		return nil, fmt.Errorf("failed to update %w", err)
 	}
 	vlogf("task completed")
 
